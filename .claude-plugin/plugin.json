@@ -1,0 +1,7 @@
+{
+  "name": "git-commits",
+  "description": "Fetch and summarize git commits across all local and remote repositories for a date range. Supports GitHub, GitLab, Bitbucket, and any git hosting.",
+  "author": {
+    "name": "sucho"
+  }
+}

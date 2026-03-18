@@ -1,0 +1,24 @@
+{
+  "scan_paths": [
+    "~/Projects",
+    "~/Work"
+  ],
+  "author_email": "your.email@example.com",
+  "author_names": ["Your Name"],
+  "max_scan_depth": 3,
+  "apis": {
+    "github": {
+      "enabled": false,
+      "token_env": "GITHUB_TOKEN"
+    },
+    "gitlab": {
+      "enabled": false,
+      "token_env": "GITLAB_TOKEN",
+      "base_url": "https://gitlab.com"
+    },
+    "bitbucket": {
+      "enabled": false,
+      "token_env": "BITBUCKET_TOKEN"
+    }
+  }
+}
