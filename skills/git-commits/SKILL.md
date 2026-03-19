@@ -44,12 +44,37 @@ Examples:
    python3 "$(find ~/.claude/plugins -path '*/git-commits/skills/git-commits/scripts/git_commits.py' -print -quit 2>/dev/null)" <from_date> <to_date>
    ```
 
-4. **Output rules:**
-   - The script output is raw data. You will reformat it for the user.
-   - Use the user's preferred language (from their CLAUDE.md or conversation context) for all your text (summaries, headers, labels). Keep commit messages, file names, project names, and URLs unchanged.
-   - Present the output as a **markdown table** for each day with these columns: **Time**, **Delta**, **Project**, **Message** (commit message — use the original text, do NOT replace with a summary), **Summary** (AI-generated 5-10 word description based on changed file names — e.g. "Auth redirect fix for web routes", "Catalog PDF generation with summary view"), **Changes** (file count ± lines), **Link** (commit URL)
-   - **AI Summary per day**: Immediately below each day's heading (e.g., `## 2026-03-02 (Monday) — 8 commits`), add a 1-2 sentence summary analyzing the commit messages and changed file paths to describe what was worked on that day. Place this summary BEFORE the table.
-   - Do NOT add a separate summary section at the end.
+4. **Output formatting — follow this EXACTLY:**
+
+   The script outputs raw markdown tables. You MUST reformat the output into the structure below. Use the user's preferred language (from CLAUDE.md) for your own text. Keep commit messages, file names, project names, and URLs unchanged.
+
+   **For EACH day, output in this exact order:**
+
+   **a) Day heading:**
+   ```
+   ## 2026-03-02 (Monday) — 8 commits
+   ```
+
+   **b) Day summary (1-2 sentences BEFORE the table):**
+   Analyze all commit messages and changed file paths for that day. Write a brief paragraph describing what was worked on. Example:
+   > Active day focused on catalog performance optimization in bosp-shoes/b2b (4 commits fixing query speed), auth redirect improvements, and a composer dependency update.
+
+   **c) Markdown table with ALL of these columns:**
+
+   | Time | Delta | Project | Message | AI Summary | Changes | Link |
+   |------|-------|---------|---------|------------|---------|------|
+   | 09:11 | — | org/backend | FIX(auth): Redirect web requests to login | Auth redirect fix for web routes | 1 file ±16 | [link](url) |
+
+   Column details:
+   - **Time** — commit time (HH:MM)
+   - **Delta** — time since previous commit that day ("—" for first commit of each day)
+   - **Project** — repository name (e.g. org/repo)
+   - **Message** — the ORIGINAL commit message text, unchanged
+   - **AI Summary** — YOU generate this: a 5-10 word description analyzing the changed FILE NAMES to explain what the commit actually did. Examples: "Auth redirect fix for web routes", "Catalog PDF generation with summary view", "Nova admin panel catalog fields update"
+   - **Changes** — file count and line changes (e.g. "3 files ±42")
+   - **Link** — clickable link to the commit URL: `[link](url)`
+
+   **IMPORTANT:** Do NOT skip any columns. Do NOT merge Message and AI Summary. Do NOT put the summary at the end — it goes under the day heading, before the table.
 
 5. If the script fails:
    - If config.json is missing: tell the user to run `python3 <script_path> --init` to create config.json, then edit it with their settings. Config is stored persistently at `~/.claude/plugins/data/git-commits-wamesk/config.json` and survives plugin updates.
