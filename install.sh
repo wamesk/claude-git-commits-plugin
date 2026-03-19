@@ -6,7 +6,7 @@ set -euo pipefail
 
 PLUGIN_NAME="git-commits"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGINS_DIR="$HOME/.claude/plugins/marketplaces/claude-plugins-official/plugins"
+PLUGINS_DIR="$HOME/.claude/plugins"
 TARGET_DIR="$PLUGINS_DIR/$PLUGIN_NAME"
 
 echo "=== git-commits plugin installer ==="

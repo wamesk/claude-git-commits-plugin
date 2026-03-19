@@ -36,29 +36,33 @@ def load_config():
 # Local git scanning
 # ---------------------------------------------------------------------------
 
-def find_git_repos(scan_paths, max_depth=3):
+def find_git_repos(scan_paths, max_depth=3, excluded_repos=None):
     """Recursively find directories containing .git within scan_paths."""
     repos = []
+    excluded = set(excluded_repos or [])
     for scan_path in scan_paths:
         root = Path(scan_path).expanduser().resolve()
         if not root.exists():
             continue
-        _walk_for_git(root, repos, 0, max_depth)
+        _walk_for_git(root, repos, 0, max_depth, excluded)
     return repos
 
 
-def _walk_for_git(directory, repos, depth, max_depth):
+def _walk_for_git(directory, repos, depth, max_depth, excluded_repos):
     """Walk directory tree looking for .git dirs."""
     if depth > max_depth:
         return
     try:
         git_dir = directory / ".git"
         if git_dir.exists():
+            # Check if this repo name matches any excluded pattern
+            if directory.name in excluded_repos:
+                return
             repos.append(directory)
             return  # Don't recurse into git repos (no nested repos)
         for entry in sorted(directory.iterdir()):
             if entry.is_dir() and not entry.name.startswith("."):
-                _walk_for_git(entry, repos, depth + 1, max_depth)
+                _walk_for_git(entry, repos, depth + 1, max_depth, excluded_repos)
     except PermissionError:
         pass
 
@@ -215,7 +219,7 @@ def get_local_commits(repo_path, author_email, author_names, since, until):
 
 
 def get_file_stats(repo_path, sha):
-    """Get file change stats for a commit."""
+    """Get file change stats and file names for a commit."""
     try:
         result = subprocess.run(
             ["git", "-C", str(repo_path), "diff-tree", "--no-commit-id", "--numstat", "-r", sha],
@@ -226,6 +230,7 @@ def get_file_stats(repo_path, sha):
 
         files_changed = 0
         total_changes = 0
+        file_names = []
         for line in result.stdout.strip().split("\n"):
             if not line:
                 continue
@@ -235,9 +240,17 @@ def get_file_stats(repo_path, sha):
                 added = int(parts[0]) if parts[0] != "-" else 0
                 deleted = int(parts[1]) if parts[1] != "-" else 0
                 total_changes += added + deleted
+                # Store shortened file path (just filename or last 2 path segments)
+                filepath = parts[2]
+                segments = filepath.split("/")
+                if len(segments) > 2:
+                    short = "/".join(segments[-2:])
+                else:
+                    short = filepath
+                file_names.append(short)
 
         if files_changed > 0:
-            return {"files": files_changed, "changes": total_changes}
+            return {"files": files_changed, "changes": total_changes, "file_names": file_names}
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
         pass
     return None
@@ -574,11 +587,16 @@ def format_delta(seconds):
 def format_stats(stats):
     """Format file change stats."""
     if not stats:
-        return "—"
+        return "—", ""
     files = stats.get("files", 0)
     changes = stats.get("changes", 0)
+    file_names = stats.get("file_names", [])
     file_word = "file" if files == 1 else "files"
-    return f"{files} {file_word} ±{changes}"
+    stats_str = f"{files} {file_word} ±{changes}"
+    files_str = ", ".join(file_names[:8])
+    if len(file_names) > 8:
+        files_str += f" +{len(file_names) - 8} more"
+    return stats_str, files_str
 
 
 def format_output(commits, stats_map, since, until, author_name, source_summary):
@@ -609,17 +627,19 @@ def format_output(commits, stats_map, since, until, author_name, source_summary)
     print("---")
     print()
 
-    # Calculate deltas (across all commits, sorted chronologically)
-    prev_dt = None
-    for c in commits:
-        dt = c.get("_datetime")
-        if dt and prev_dt:
-            delta_secs = (dt - prev_dt).total_seconds()
-            c["_delta"] = format_delta(delta_secs)
-        else:
-            c["_delta"] = "—"
-        if dt:
-            prev_dt = dt
+    # Calculate deltas per day (reset to "—" for first commit of each day)
+    for date_key in sorted(by_date.keys()):
+        day_commits = by_date[date_key]
+        prev_dt = None
+        for c in day_commits:
+            dt = c.get("_datetime")
+            if dt and prev_dt:
+                delta_secs = (dt - prev_dt).total_seconds()
+                c["_delta"] = format_delta(delta_secs)
+            else:
+                c["_delta"] = "—"
+            if dt:
+                prev_dt = dt
 
     # Output by date (sorted oldest first)
     for date_key in sorted(by_date.keys()):
@@ -631,28 +651,24 @@ def format_output(commits, stats_map, since, until, author_name, source_summary)
 
         print(f"## {date_key} ({day_name}) — {count} {commit_word}")
         print()
-        print("| Time  | Delta  | Project | Commit | Changes |")
-        print("|-------|--------|---------|--------|---------|")
+        print("| Time | Delta | Project | Message | Files | Changes | Link |")
+        print("|------|-------|---------|---------|-------|---------|------|")
 
         for c in day_commits:
             cdt = c.get("_datetime")
             time_str = cdt.strftime("%H:%M") if cdt else "??:??"
             delta = c.get("_delta", "—")
             project = c["project"]
-            message = c["message"][:80]
-            url = c.get("url")
-            sha = c["sha"]
-            stats = stats_map.get(sha) or c.get("stats")
+            message = c["message"][:100].replace("|", "\\|")
+            url = c.get("url", "")
+            stats = stats_map.get(c["sha"]) or c.get("stats")
+            changes_str, files_str = format_stats(stats)
+            # Escape pipes in file names
+            files_str = files_str.replace("|", "\\|")
 
-            # Format commit as link or plain text
-            if url:
-                commit_str = f"[{message}]({url})"
-            else:
-                commit_str = message
+            link_str = f"[link]({url})" if url else "—"
 
-            changes_str = format_stats(stats)
-
-            print(f"| {time_str} | {delta} | {project} | {commit_str} | {changes_str} |")
+            print(f"| {time_str} | {delta} | {project} | {message} | {files_str} | {changes_str} | {link_str} |")
 
         print()
 
@@ -661,16 +677,70 @@ def format_output(commits, stats_map, since, until, author_name, source_summary)
 # Main
 # ---------------------------------------------------------------------------
 
-def main():
-    # Parse arguments
-    if len(sys.argv) < 2:
-        print("Usage: git_commits.py <from YYYY-MM-DD> [to YYYY-MM-DD]", file=sys.stderr)
-        print("Example: git_commits.py 2026-03-01 2026-03-31", file=sys.stderr)
-        print("         git_commits.py 2026-03-01  (until today)", file=sys.stderr)
+def init_config():
+    """Create config.json from template with auto-detected git info."""
+    script_dir = Path(__file__).resolve().parent
+    config_path = script_dir.parent.parent.parent / "config.json"
+    example_path = script_dir.parent.parent.parent / "config.example.json"
+
+    if config_path.exists():
+        print(f"config.json already exists at {config_path}")
+        return
+
+    if not example_path.exists():
+        print(f"Error: config.example.json not found at {example_path}", file=sys.stderr)
         sys.exit(1)
 
-    since = sys.argv[1]
-    until = sys.argv[2] if len(sys.argv) >= 3 else datetime.now().strftime("%Y-%m-%d")
+    import shutil
+    shutil.copy2(example_path, config_path)
+
+    # Try to auto-detect git user info
+    try:
+        email_result = subprocess.run(["git", "config", "--global", "user.email"],
+                                       capture_output=True, text=True, timeout=5)
+        name_result = subprocess.run(["git", "config", "--global", "user.name"],
+                                      capture_output=True, text=True, timeout=5)
+        email = email_result.stdout.strip() if email_result.returncode == 0 else ""
+        name = name_result.stdout.strip() if name_result.returncode == 0 else ""
+
+        if email or name:
+            with open(config_path) as f:
+                config = json.load(f)
+            if email:
+                config["author_email"] = email
+            if name:
+                config["author_names"] = [name]
+            with open(config_path, "w") as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+            print(f"Config created with detected git info: {name} <{email}>")
+        else:
+            print("Config created. Edit it with your git email and scan paths.")
+    except Exception:
+        print("Config created. Edit it with your git email and scan paths.")
+
+    print(f"  Path: {config_path}")
+
+
+def main():
+    # Handle --init flag
+    if len(sys.argv) >= 2 and sys.argv[1] == "--init":
+        init_config()
+        return
+
+    # Parse arguments
+    today = datetime.now()
+
+    if len(sys.argv) < 2:
+        # No arguments: current month (1st day to today)
+        since = today.replace(day=1).strftime("%Y-%m-%d")
+        until = today.strftime("%Y-%m-%d")
+    elif len(sys.argv) == 2:
+        since = sys.argv[1]
+        until = today.strftime("%Y-%m-%d")
+    else:
+        since = sys.argv[1]
+        until = sys.argv[2]
 
     # Validate date format
     for d, label in [(since, "from"), (until, "to")]:
@@ -685,6 +755,7 @@ def main():
     author_email = config.get("author_email", "")
     author_names = config.get("author_names", [])
     max_depth = config.get("max_scan_depth", 3)
+    excluded_repos = config.get("excluded_repos", [])
 
     if not author_email and not author_names:
         print("Error: Set author_email or author_names in config.json", file=sys.stderr)
@@ -697,7 +768,7 @@ def main():
     source_counts = defaultdict(int)
 
     if scan_paths:
-        repos = find_git_repos(scan_paths, max_depth)
+        repos = find_git_repos(scan_paths, max_depth, excluded_repos)
         local_repo_count = 0
         for repo_path in repos:
             commits = get_local_commits(repo_path, author_email, author_names, since, until)

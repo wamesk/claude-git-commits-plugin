@@ -4,7 +4,7 @@ set -euo pipefail
 # Claude Code Plugin: git-commits — uninstaller
 
 PLUGIN_NAME="git-commits"
-PLUGINS_DIR="$HOME/.claude/plugins/marketplaces/claude-plugins-official/plugins"
+PLUGINS_DIR="$HOME/.claude/plugins"
 TARGET_DIR="$PLUGINS_DIR/$PLUGIN_NAME"
 
 echo "=== git-commits plugin uninstaller ==="

@@ -1,7 +1,7 @@
 # Claude Code Plugin: git-commits — Windows Uninstaller
 
 $PluginName = "git-commits"
-$PluginsDir = Join-Path $env:USERPROFILE ".claude\plugins\marketplaces\claude-plugins-official\plugins"
+$PluginsDir = Join-Path $env:USERPROFILE ".claude\plugins"
 $TargetDir = Join-Path $PluginsDir $PluginName
 
 Write-Host "=== git-commits plugin uninstaller (Windows) ===" -ForegroundColor Cyan

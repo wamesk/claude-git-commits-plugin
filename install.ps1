@@ -5,7 +5,7 @@ $ErrorActionPreference = "Stop"
 
 $PluginName = "git-commits"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$PluginsDir = Join-Path $env:USERPROFILE ".claude\plugins\marketplaces\claude-plugins-official\plugins"
+$PluginsDir = Join-Path $env:USERPROFILE ".claude\plugins"
 $TargetDir = Join-Path $PluginsDir $PluginName
 
 Write-Host "=== git-commits plugin installer (Windows) ===" -ForegroundColor Cyan

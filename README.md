@@ -61,7 +61,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 > **Windows note:** Creating symlinks on Windows requires either Administrator privileges or Developer Mode enabled (Settings > For developers > Developer Mode).
 
 The installer will:
-- Create a symlink from `~/.claude/plugins/.../git-commits/` to this directory
+- Create a symlink from `~/.claude/plugins/git-commits/` to this directory
 - If an existing (non-symlink) plugin directory is found, it backs up `config.json` and replaces it
 - Create `config.json` from the template
 - Auto-detect your git name/email and offer to pre-fill the config
@@ -79,6 +79,7 @@ Set your values:
 ```json
 {
   "scan_paths": ["~/Work", "~/Projects"],
+  "excluded_repos": [],
   "author_email": "your.email@company.com",
   "author_names": ["Your Name"],
   "max_scan_depth": 3
@@ -94,15 +95,17 @@ The skill appears after restarting your Claude Code session. Check with `/help`.
 ### In Claude Code CLI
 
 ```
-/git-commits 2026-03-01 2026-03-31     # specific date range
-/git-commits 2026-03-01                 # from date until today
+/git-commits                             # current month (1st to today)
+/git-commits 2026-03-01 2026-03-31       # specific date range
+/git-commits 2026-03-01                  # from date until today
 ```
 
 ### Standalone (without Claude)
 
 ```bash
-python3 skills/git-commits/scripts/git_commits.py 2026-03-01 2026-03-31
-python3 skills/git-commits/scripts/git_commits.py 2026-03-01
+python3 skills/git-commits/scripts/git_commits.py                       # current month
+python3 skills/git-commits/scripts/git_commits.py 2026-03-01 2026-03-31 # specific range
+python3 skills/git-commits/scripts/git_commits.py 2026-03-01            # from date until today
 ```
 
 ## Configuration
@@ -122,6 +125,14 @@ Used to filter `git log`. The script first tries `author_email`, then falls back
 ```json
 "author_email": "john@company.com",
 "author_names": ["John Doe", "johndoe"]
+```
+
+### excluded_repos
+
+Repository folder names to skip during scanning. Use this to exclude specific projects from your commit log.
+
+```json
+"excluded_repos": ["old-project", "archived-app", "test-repo"]
 ```
 
 ### max_scan_depth
