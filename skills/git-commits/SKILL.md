@@ -52,13 +52,13 @@ Examples:
    - Do NOT add a separate summary section at the end.
 
 5. If the script fails:
-   - If config.json is missing: tell the user to run `python3 <script_path> --init` to create config.json, then edit it with their settings.
+   - If config.json is missing: tell the user to run `python3 <script_path> --init` to create config.json, then edit it with their settings. Config is stored persistently at `~/.claude/plugins/data/git-commits-wamesk/config.json` and survives plugin updates.
    - If no commits found: suggest checking the date range and config settings.
    - If API auth fails: suggest setting the appropriate token environment variable or installing `gh` CLI.
 
 ## Configuration
 
-The config file is located next to the script (auto-detected by the script itself).
+The config file is stored at `~/.claude/plugins/data/git-commits-wamesk/config.json` (persistent, survives plugin updates).
 
 Key settings:
 - `scan_paths`: directories to scan for git repos (e.g., `["~/WAME", "~/Projects"]`)

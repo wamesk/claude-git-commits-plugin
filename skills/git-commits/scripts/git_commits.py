@@ -20,13 +20,38 @@ from collections import defaultdict
 # Configuration
 # ---------------------------------------------------------------------------
 
-def load_config():
-    """Load config.json from the plugin root (two levels up from scripts/)."""
+DATA_DIR_NAME = "git-commits-wamesk"
+
+
+def get_data_dir():
+    """Get the persistent data directory (~/.claude/plugins/data/git-commits-wamesk/)."""
+    data_dir = Path.home() / ".claude" / "plugins" / "data" / DATA_DIR_NAME
+    return data_dir
+
+
+def get_config_path():
+    """Find config.json in order: data dir (persistent) > plugin root (fallback)."""
+    # 1. Persistent location (survives plugin updates)
+    data_config = get_data_dir() / "config.json"
+    if data_config.exists():
+        return data_config
+
+    # 2. Fallback: plugin root (legacy / standalone usage)
     script_dir = Path(__file__).resolve().parent
-    config_path = script_dir.parent.parent.parent / "config.json"
-    if not config_path.exists():
-        print(f"Error: config.json not found at {config_path}", file=sys.stderr)
-        print("Create it with scan_paths, author_email, and author_names.", file=sys.stderr)
+    plugin_config = script_dir.parent.parent.parent / "config.json"
+    if plugin_config.exists():
+        return plugin_config
+
+    return None
+
+
+def load_config():
+    """Load config.json from persistent data dir or plugin root."""
+    config_path = get_config_path()
+    if not config_path:
+        print("Error: config.json not found.", file=sys.stderr)
+        print(f"Run with --init to create it, or place it at:", file=sys.stderr)
+        print(f"  {get_data_dir() / 'config.json'}", file=sys.stderr)
         sys.exit(1)
     with open(config_path) as f:
         return json.load(f)
@@ -678,21 +703,42 @@ def format_output(commits, stats_map, since, until, author_name, source_summary)
 # ---------------------------------------------------------------------------
 
 def init_config():
-    """Create config.json from template with auto-detected git info."""
-    script_dir = Path(__file__).resolve().parent
-    config_path = script_dir.parent.parent.parent / "config.json"
-    example_path = script_dir.parent.parent.parent / "config.example.json"
-
-    if config_path.exists():
-        print(f"config.json already exists at {config_path}")
+    """Create config.json in persistent data dir with auto-detected git info."""
+    # Check if config already exists anywhere
+    existing = get_config_path()
+    if existing:
+        print(f"config.json already exists at {existing}")
         return
 
-    if not example_path.exists():
-        print(f"Error: config.example.json not found at {example_path}", file=sys.stderr)
-        sys.exit(1)
+    # Create in persistent data dir
+    data_dir = get_data_dir()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    config_path = data_dir / "config.json"
 
-    import shutil
-    shutil.copy2(example_path, config_path)
+    # Find example template
+    script_dir = Path(__file__).resolve().parent
+    example_path = script_dir.parent.parent.parent / "config.example.json"
+
+    if example_path.exists():
+        import shutil
+        shutil.copy2(example_path, config_path)
+    else:
+        # Create minimal config if no template found
+        config = {
+            "scan_paths": [],
+            "excluded_repos": [],
+            "author_email": "",
+            "author_names": [],
+            "max_scan_depth": 3,
+            "apis": {
+                "github": {"enabled": False, "token_env": "GITHUB_TOKEN"},
+                "gitlab": {"enabled": False, "token_env": "GITLAB_TOKEN", "base_url": "https://gitlab.com"},
+                "bitbucket": {"enabled": False, "token_env": "BITBUCKET_TOKEN"}
+            }
+        }
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+            f.write("\n")
 
     # Try to auto-detect git user info
     try:
