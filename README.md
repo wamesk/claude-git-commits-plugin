@@ -70,6 +70,8 @@ Then install the plugin:
 /plugin install git-commits@wamesk
 ```
 
+After installation, restart Claude Code session for the `/git-commits` command to become available.
+
 ### Manual
 
 ```bash
