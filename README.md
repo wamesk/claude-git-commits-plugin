@@ -100,9 +100,16 @@ python3 skills/git-commits/scripts/git_commits.py --init
 
 ```
 /git-commits                             # current month (1st to today)
+/git-commits today                       # only today
+/git-commits yesterday                   # only yesterday
+/git-commits last-week                   # previous Monday to Sunday
+/git-commits last_month                  # previous full month
+/git-commits this-year                   # January 1st to today
 /git-commits 2026-03-01 2026-03-31       # specific date range
 /git-commits 2026-03-01                  # from date until today
 ```
+
+Supported aliases: `today`, `yesterday`, `this-week`, `last-week`, `this-month`, `last-month`, `this-year`, `last-year`. Hyphens and underscores are interchangeable.
 
 ### Standalone (without Claude)
 
@@ -133,9 +140,10 @@ Repository folder names to skip during scanning.
 ### author_email / author_names
 
 Used to filter `git log`. The script first tries `author_email`, then falls back to `author_names`.
+Supports both a single string and an array of emails.
 
 ```json
-"author_email": "john@company.com",
+"author_email": ["john@company.com", "john@personal.com"],
 "author_names": ["John Doe", "johndoe"]
 ```
 

@@ -1,7 +1,7 @@
 ---
 name: git-commits
 description: "Use when the user asks to 'show my commits', 'list my commits', 'git commits', 'commit summary', 'commit log', 'what did I commit', 'show my work log', 'zoznam commitov', 'čo som commitol', or wants a summary of their git commit activity across repositories for a date range. Invoked as /git-commits with date parameters in YYYY-MM-DD format."
-argument-hint: [from YYYY-MM-DD] [to YYYY-MM-DD]
+argument-hint: [from YYYY-MM-DD | alias] [to YYYY-MM-DD]
 allowed-tools: [Bash, Read]
 ---
 
@@ -13,21 +13,41 @@ Fetch and display a summary of all git commits across repositories for a date ra
 
 The user invoked this with: $ARGUMENTS
 
-Expected format: `[from_date] [to_date]` where dates are in `YYYY-MM-DD` format.
+Expected format: `[from_date] [to_date]` where dates are `YYYY-MM-DD` or a **named alias**.
 - If no arguments provided, default to the current month (1st day to today).
 - If only one date provided, use it as start date with today as end date.
 
+**Named aliases** — convert these to actual YYYY-MM-DD dates before passing to the script:
+
+| Alias | Meaning |
+|-------|---------|
+| `today` | today → today |
+| `yesterday` | yesterday → yesterday |
+| `this-week` / `this_week` | Monday of current week → today |
+| `last-week` / `last_week` | Monday of previous week → Sunday of previous week |
+| `this-month` / `this_month` | 1st of current month → today |
+| `last-month` / `last_month` | 1st of previous month → last day of previous month |
+| `this-year` / `this_year` | January 1st of current year → today |
+| `last-year` / `last_year` | January 1st of previous year → December 31st of previous year |
+
+Aliases are case-insensitive. Hyphens and underscores are interchangeable.
+
 Examples:
 - `/git-commits` — current month (1st to today)
+- `/git-commits today` — only today
+- `/git-commits yesterday` — only yesterday
+- `/git-commits last-week` — previous Monday to Sunday
+- `/git-commits last_month` — previous month (full)
+- `/git-commits this-year` — January 1st to today
 - `/git-commits 2026-03-01 2026-03-31` — specific range
 - `/git-commits 2026-03-01` — from March 1st until today
-- `/git-commits 2026-01-01 2026-12-31` — full year
 
 ## Instructions
 
-1. Parse `$ARGUMENTS` to extract two dates in `YYYY-MM-DD` format.
+1. Parse `$ARGUMENTS`:
+   - If a named alias is used (e.g. `last-week`, `today`), convert it to two YYYY-MM-DD dates using the alias table above.
    - If no arguments provided, default to the current month (first day to today).
-   - If only one date provided, use it as start date with today as end date.
+   - If only one YYYY-MM-DD date provided, use it as start date with today as end date.
 
 2. Find the script. The script is located relative to this SKILL.md file:
    ```
@@ -88,6 +108,6 @@ The config file is stored at `~/.claude/plugins/data/git-commits-wamesk/config.j
 Key settings:
 - `scan_paths`: directories to scan for git repos (e.g., `["~/WAME", "~/Projects"]`)
 - `excluded_repos`: repository folder names to skip (e.g., `["old-project", "archived-app"]`)
-- `author_email`: git author email to filter commits
+- `author_email`: git author email(s) to filter commits — string or array (e.g., `"you@email.com"` or `["work@email.com", "personal@email.com"]`)
 - `author_names`: alternative author names to try
 - `apis.github/gitlab/bitbucket.enabled`: enable API fetching for remote-only repos

@@ -7,7 +7,7 @@
     "old-project",
     "archived-app"
   ],
-  "author_email": "your.email@example.com",
+  "author_email": ["your.email@example.com", "your.other@email.com"],
   "author_names": ["Your Name"],
   "max_scan_depth": 3,
   "apis": {

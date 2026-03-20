@@ -158,54 +158,60 @@ def detect_host(web_base_url):
     return "other"
 
 
-def get_local_commits(repo_path, author_email, author_names, since, until):
+def get_local_commits(repo_path, author_emails, author_names, since, until):
     """Get commits from a local git repo for the given author and date range."""
     commits = []
+    seen_shas = set()
     project_name, web_base_url = get_repo_info(repo_path)
     host = detect_host(web_base_url)
-
-    # Build author filter: use email as primary
-    author_filter = author_email
 
     # until needs +1 day because git --until is exclusive
     until_plus = (datetime.strptime(until, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
 
-    try:
-        result = subprocess.run(
-            [
-                "git", "-C", str(repo_path), "log",
-                f"--author={author_filter}",
-                f"--since={since}",
-                f"--until={until_plus}",
-                "--format=%H|%aI|%s",
-                "--no-merges",
-                "--all",
-            ],
-            capture_output=True, text=True, timeout=30
-        )
-        if result.returncode != 0:
-            return commits
-
-        for line in result.stdout.strip().split("\n"):
-            if not line:
+    # Try each email
+    for author_filter in author_emails:
+        try:
+            result = subprocess.run(
+                [
+                    "git", "-C", str(repo_path), "log",
+                    f"--author={author_filter}",
+                    f"--since={since}",
+                    f"--until={until_plus}",
+                    "--format=%H|%aI|%s",
+                    "--no-merges",
+                    "--all",
+                ],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode != 0:
                 continue
-            parts = line.split("|", 2)
-            if len(parts) < 3:
-                continue
-            sha, date_iso, message = parts
-            commit_url = build_commit_url(web_base_url, sha, host)
-            commits.append({
-                "sha": sha,
-                "date_iso": date_iso,
-                "message": message.strip(),
-                "project": project_name,
-                "url": commit_url,
-                "source": "local",
-            })
 
-        # If no results with email, try author names
-        if not commits and author_names:
-            for name in author_names:
+            for line in result.stdout.strip().split("\n"):
+                if not line:
+                    continue
+                parts = line.split("|", 2)
+                if len(parts) < 3:
+                    continue
+                sha, date_iso, message = parts
+                if sha in seen_shas:
+                    continue
+                seen_shas.add(sha)
+                commit_url = build_commit_url(web_base_url, sha, host)
+                commits.append({
+                    "sha": sha,
+                    "date_iso": date_iso,
+                    "message": message.strip(),
+                    "project": project_name,
+                    "url": commit_url,
+                    "source": "local",
+                })
+        except Exception:
+            continue
+
+    # If no results with emails, try author names
+    if not commits and author_names:
+        for name in author_names:
+            try:
                 result2 = subprocess.run(
                     [
                         "git", "-C", str(repo_path), "log",
@@ -236,9 +242,8 @@ def get_local_commits(repo_path, author_email, author_names, since, until):
                             "source": "local",
                         })
                     break  # Found commits with this name, stop trying others
-
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                continue
 
     return commits
 
@@ -448,7 +453,8 @@ def get_gitlab_commits(config, since, until):
         return []
 
     base_url = api_config.get("base_url", "https://gitlab.com").rstrip("/")
-    author_email = config.get("author_email", "")
+    raw_email = config.get("author_email", "")
+    api_emails = raw_email if isinstance(raw_email, list) else ([raw_email] if raw_email else [])
 
     # Get all projects the user is a member of
     projects = []
@@ -471,11 +477,15 @@ def get_gitlab_commits(config, since, until):
         path = project.get("path_with_namespace", project.get("name", str(pid)))
         web_url = project.get("web_url", "")
 
-        proj_commits = gitlab_api_request(
-            base_url,
-            f"/projects/{pid}/repository/commits?author={author_email}&since={since_iso}&until={until_plus}&per_page=100",
-            token
-        )
+        proj_commits = []
+        for em in api_emails:
+            batch = gitlab_api_request(
+                base_url,
+                f"/projects/{pid}/repository/commits?author={em}&since={since_iso}&until={until_plus}&per_page=100",
+                token
+            )
+            if batch:
+                proj_commits.extend(batch)
         if not proj_commits:
             continue
 
@@ -525,7 +535,8 @@ def get_bitbucket_commits(config, since, until):
         print(f"Bitbucket API enabled but {token_env} not set.", file=sys.stderr)
         return []
 
-    author_email = config.get("author_email", "")
+    raw_email = config.get("author_email", "")
+    api_emails = raw_email if isinstance(raw_email, list) else ([raw_email] if raw_email else [])
 
     # Get repositories
     repos = []
@@ -551,7 +562,7 @@ def get_bitbucket_commits(config, since, until):
         for c in data.get("values", []):
             commit_date = c.get("date", "")
             author_raw = c.get("author", {}).get("raw", "")
-            if author_email not in author_raw:
+            if not any(em in author_raw for em in api_emails):
                 continue
 
             # Check date range
@@ -798,12 +809,19 @@ def main():
 
     config = load_config()
     scan_paths = config.get("scan_paths", [])
-    author_email = config.get("author_email", "")
+    # author_email supports both string and array
+    raw_email = config.get("author_email", "")
+    if isinstance(raw_email, list):
+        author_emails = [e for e in raw_email if e]
+    elif raw_email:
+        author_emails = [raw_email]
+    else:
+        author_emails = []
     author_names = config.get("author_names", [])
     max_depth = config.get("max_scan_depth", 3)
     excluded_repos = config.get("excluded_repos", [])
 
-    if not author_email and not author_names:
+    if not author_emails and not author_names:
         print("Error: Set author_email or author_names in config.json", file=sys.stderr)
         sys.exit(1)
 
@@ -817,7 +835,7 @@ def main():
         repos = find_git_repos(scan_paths, max_depth, excluded_repos)
         local_repo_count = 0
         for repo_path in repos:
-            commits = get_local_commits(repo_path, author_email, author_names, since, until)
+            commits = get_local_commits(repo_path, author_emails, author_names, since, until)
             if commits:
                 local_repo_count += 1
                 repos_with_commits.append((repo_path, commits))
@@ -861,7 +879,7 @@ def main():
     source_summary = ", ".join(source_parts) if source_parts else None
 
     # Determine author display name
-    author_display = author_names[0] if author_names else author_email
+    author_display = author_names[0] if author_names else (author_emails[0] if author_emails else "unknown")
 
     # Format and output
     format_output(all_commits, stats_map, since, until, author_display, source_summary)
