@@ -73,13 +73,13 @@ Then install the plugin:
 ### Manual
 
 ```bash
-git clone git@github.com:wamesk/claude-git-commits-plugin.git
+git clone git@github.com:wamesk/claude-code-plugin-git-commits.git
 ```
 
 Then in Claude Code:
 
 ```
-claude --plugin-dir ~/path/to/claude-git-commits-plugin
+claude --plugin-dir ~/path/to/claude-code-plugin-git-commits
 ```
 
 ### Configuration
@@ -183,7 +183,7 @@ Config at `~/.claude/plugins/data/git-commits-wamesk/config.json` is preserved.
 ## Project Structure
 
 ```
-claude-git-commits-plugin/
+claude-code-plugin-git-commits/
 ├── .claude-plugin/
 │   └── plugin.json              # Plugin manifest
 ├── skills/
