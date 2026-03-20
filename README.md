@@ -1,6 +1,8 @@
 # git-commits — Claude Code Plugin
 
-A Claude Code CLI skill that fetches and summarizes your git commits across **all repositories** for a given date range.
+A Claude Code plugin that fetches and summarizes your git commits across **all repositories** for a given date range.
+
+Scans local git repos, groups commits by day, and uses AI to generate summaries of what was worked on — based on commit messages and changed file names.
 
 Works with any git hosting — GitHub, GitLab, Bitbucket, self-hosted, or local-only repos.
 
@@ -8,27 +10,42 @@ Works with any git hosting — GitHub, GitLab, Bitbucket, self-hosted, or local-
 
 - Scans local git repos across multiple directories
 - Groups commits by date with formatted markdown tables
-- Shows time, delta between commits, project name, commit message (with link), and file change stats
+- **AI-generated summary per commit** — analyzes changed files to describe what was done
+- **AI-generated day summary** — overview of the day's work placed before each table
+- Shows time, delta between commits, project, original commit message, AI summary, changes, and link
+- Exclude specific repositories from scanning
 - Optional API integration for GitHub, GitLab, and Bitbucket (for repos not cloned locally)
 - Deduplicates commits found both locally and via API
-- Can also run standalone without Claude Code
+- Config stored persistently — survives plugin updates
 
 ## Example Output
 
 ```
-# Git Commits: 2026-03-01 — 2026-03-18
-Author: John Doe | Total commits: 24
-Sources: 4 local repos
+# Git Commits: 2026-03-03 — 2026-03-04
+Author: John Doe | Total commits: 4
+Sources: 2 local repos
 
 ---
 
-## 2026-03-02 (Monday) — 3 commits
+## 2026-03-03 (Tuesday) — 3 commits
 
-| Time  | Delta  | Project          | Commit                              | Changes      |
-|-------|--------|------------------|-------------------------------------|--------------|
-| 09:11 | —      | org/backend      | fix: resolve race condition (link)  | 3 files ±42  |
-| 09:31 | +19m   | org/frontend     | feat: add webhook retry (link)      | 5 files ±128 |
-| 14:47 | +5h16m | org/tools        | update: prompt config (link)        | 6 files ±714 |
+Focused on bosp-shoes/b2b: catalog performance fix, auth redirect
+improvement for web routes, and package-lock sync.
+
+| Time  | Delta | Project        | Message                                              | AI Summary                        | Changes     | Link          |
+|-------|-------|----------------|------------------------------------------------------|-----------------------------------|-------------|---------------|
+| 22:46 | —     | bosp-shoes/b2b | FIX(catalog): Fix catalog speed                      | Catalog speed fix in README        | 1 file ±2   | [link](url)   |
+| 23:05 | +18m  | bosp-shoes/b2b | FIX(auth): Redirect web requests to login instead... | Auth redirect fix for web routes   | 1 file ±16  | [link](url)   |
+| 23:09 | +3m   | bosp-shoes/b2b | FIX: Update package-lock.json to sync with package   | NPM dependency lock sync           | 1 file ±304 | [link](url)   |
+
+## 2026-03-04 (Wednesday) — 1 commit
+
+Single commit on catalog PDF generation with service provider
+and auth config updates in bosp-shoes/b2b.
+
+| Time  | Delta   | Project        | Message                         | AI Summary                              | Changes     | Link        |
+|-------|---------|----------------|---------------------------------|-----------------------------------------|-------------|-------------|
+| 20:56 | —       | bosp-shoes/b2b | FIX(catalog): Fix catalog speed | Catalog speed fix with provider & config | 7 files ±105 | [link](url) |
 ```
 
 ## Requirements
@@ -39,56 +56,43 @@ Sources: 4 local repos
 
 ## Installation
 
-### 1. Clone the repo
+### Via Marketplace (recommended)
+
+First, add the `wamesk` marketplace (one-time):
+
+```
+/plugin marketplace add wamesk/claude-code
+```
+
+Then install the plugin:
+
+```
+/plugin install git-commits@wamesk
+```
+
+### Manual
 
 ```bash
-git clone <repo-url> ~/claude-git-commits-plugin
-cd ~/claude-git-commits-plugin
+git clone git@github.com:wamesk/claude-git-commits-plugin.git
 ```
 
-### 2. Run the installer
+Then in Claude Code:
 
-**macOS / Linux:**
-```bash
-./install.sh
+```
+claude --plugin-dir ~/path/to/claude-git-commits-plugin
 ```
 
-**Windows (PowerShell):**
-```powershell
-powershell -ExecutionPolicy Bypass -File install.ps1
-```
+### Configuration
 
-> **Windows note:** Creating symlinks on Windows requires either Administrator privileges or Developer Mode enabled (Settings > For developers > Developer Mode).
+On first run, if no config exists, the plugin will ask for your settings and create the config automatically.
 
-The installer will:
-- Create a symlink from `~/.claude/plugins/git-commits/` to this directory
-- If an existing (non-symlink) plugin directory is found, it backs up `config.json` and replaces it
-- Create `config.json` from the template
-- Auto-detect your git name/email and offer to pre-fill the config
+Config is stored at `~/.claude/plugins/data/git-commits-wamesk/config.json` — this location **survives plugin updates**.
 
-### 3. Edit config.json
+You can also create it manually or run:
 
 ```bash
-nano config.json
-# or
-code config.json
+python3 skills/git-commits/scripts/git_commits.py --init
 ```
-
-Set your values:
-
-```json
-{
-  "scan_paths": ["~/Work", "~/Projects"],
-  "excluded_repos": [],
-  "author_email": "your.email@company.com",
-  "author_names": ["Your Name"],
-  "max_scan_depth": 3
-}
-```
-
-### 4. Restart Claude Code
-
-The skill appears after restarting your Claude Code session. Check with `/help`.
 
 ## Usage
 
@@ -108,7 +112,7 @@ python3 skills/git-commits/scripts/git_commits.py 2026-03-01 2026-03-31 # specif
 python3 skills/git-commits/scripts/git_commits.py 2026-03-01            # from date until today
 ```
 
-## Configuration
+## Configuration Reference
 
 ### scan_paths
 
@@ -118,6 +122,14 @@ Directories to recursively scan for git repositories. Uses `~` expansion.
 "scan_paths": ["~/Work", "~/Projects", "~/Personal"]
 ```
 
+### excluded_repos
+
+Repository folder names to skip during scanning.
+
+```json
+"excluded_repos": ["old-project", "archived-app", "test-repo"]
+```
+
 ### author_email / author_names
 
 Used to filter `git log`. The script first tries `author_email`, then falls back to `author_names`.
@@ -125,14 +137,6 @@ Used to filter `git log`. The script first tries `author_email`, then falls back
 ```json
 "author_email": "john@company.com",
 "author_names": ["John Doe", "johndoe"]
-```
-
-### excluded_repos
-
-Repository folder names to skip during scanning. Use this to exclude specific projects from your commit log.
-
-```json
-"excluded_repos": ["old-project", "archived-app", "test-repo"]
 ```
 
 ### max_scan_depth
@@ -149,57 +153,24 @@ Set `enabled: true` and either:
 - Install [GitHub CLI](https://cli.github.com/) and run `gh auth login`, or
 - Create a [personal access token](https://github.com/settings/tokens) and set `GITHUB_TOKEN` env var
 
-```json
-"apis": {
-  "github": {
-    "enabled": true,
-    "token_env": "GITHUB_TOKEN"
-  }
-}
-```
-
 #### GitLab
 
 Create a [personal access token](https://gitlab.com/-/user_settings/personal_access_tokens) with `read_api` scope.
-
-```json
-"apis": {
-  "gitlab": {
-    "enabled": true,
-    "token_env": "GITLAB_TOKEN",
-    "base_url": "https://gitlab.com"
-  }
-}
-```
-
 For self-hosted GitLab, change `base_url` to your instance URL.
 
 #### Bitbucket
 
 Create an [app password](https://bitbucket.org/account/settings/app-passwords/) with repository read permissions.
 
-```json
-"apis": {
-  "bitbucket": {
-    "enabled": true,
-    "token_env": "BITBUCKET_TOKEN"
-  }
-}
-```
-
 ## Uninstall
 
-**macOS / Linux:**
-```bash
-./uninstall.sh
+In Claude Code:
+
+```
+/plugin uninstall git-commits@wamesk
 ```
 
-**Windows (PowerShell):**
-```powershell
-powershell -ExecutionPolicy Bypass -File uninstall.ps1
-```
-
-Removes the symlink only. Your config.json and the plugin directory remain intact.
+Config at `~/.claude/plugins/data/git-commits-wamesk/config.json` is preserved.
 
 ## Project Structure
 
@@ -213,11 +184,6 @@ claude-git-commits-plugin/
 │       └── scripts/
 │           └── git_commits.py   # Main Python script
 ├── config.example.json          # Configuration template
-├── config.json                  # Your local config (gitignored)
-├── install.sh                   # Installer (macOS/Linux)
-├── install.ps1                  # Installer (Windows)
-├── uninstall.sh                 # Uninstaller (macOS/Linux)
-├── uninstall.ps1                # Uninstaller (Windows)
 └── README.md
 ```
 
